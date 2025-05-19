@@ -1,0 +1,9 @@
+name: Thinkwell AI Auth
+title: null
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: default
+include: [index.html]
+exclude: [README.md]
