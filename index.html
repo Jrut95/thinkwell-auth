@@ -77,6 +77,11 @@
             cursor: pointer;
         }
 
+        .sign-up-button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
         #error-message {
             color: red;
             text-align: center;
@@ -131,14 +136,13 @@
     <div class="main-content">
         <img class="brain-icon" src="https://images.clickfunnels.com/cdn-cgi/image/width=2600,fit=scale-down,f=auto,q=100/https://statics.myclickfunnels.com/workspace/vGLVoO/image/14138836/file/b0b234c4a1b29f5bdeb561956f4b54df.png" alt="Thinkwell Logo">
         <h1>Welcome To Thinkwell AI</h1>
-        <p class="subtitle">Sign up to continue</p>
+        <p class="subtitle">Create your password to continue</p>
 
         <div class="form-container">
             <div id="error-message"></div>
-            <input type="email" id="email" class="input-field" placeholder="Email" readonly>
             <input type="password" id="password" class="input-field" placeholder="Password" autocomplete="new-password">
             <input type="password" id="confirm-password" class="input-field" placeholder="Confirm Password" autocomplete="new-password">
-            <button class="sign-up-button" onclick="handleSignUp()">Sign Up</button>
+            <button class="sign-up-button" onclick="handleSignUp()">Create Account</button>
         </div>
 
         <div id="success-message">
@@ -157,50 +161,50 @@
         const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpkYWtta3h4aHlzb29leGR3ZnRrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM5NzkxMDMsImV4cCI6MjA1OTU1NTEwM30.Yhsod6DyAMi6XjPQiWw0kvXcGHA3b56a2xBOmnVD6Wk';
         const supabaseClient = supabase.createClient(supabaseUrl, supabaseAnonKey);
 
-        // Extract all possible parameters from URL
-        const params = new URLSearchParams(window.location.search);
-        const token = params.get('token');
-        const email = params.get('email');
-        
-        // Stripe parameters
-        const stripeCustomerId = params.get('stripe_customer_id');
-        const stripeSubscriptionId = params.get('subscription_id');
-        
-        // ClickFunnels parameters
-        const clickfunnelsCustomerId = params.get('clickfunnels_customer_id');
-        const clickfunnelsSubscriptionId = params.get('clickfunnels_subscription_id');
-        
-        // Determine the source
-        const source = clickfunnelsCustomerId ? 'clickfunnels' : 'stripe';
+        // Get hash parameters
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const accessToken = hashParams.get('access_token');
+        const refreshToken = hashParams.get('refresh_token');
+        const expiresIn = hashParams.get('expires_in');
+        const errorCode = hashParams.get('error');
+        const errorDescription = hashParams.get('error_description');
 
-        // Debug log all parameters
-        console.log('Auth parameters:', {
-            email,
-            source,
-            stripeParams: { stripeCustomerId, stripeSubscriptionId },
-            clickfunnelsParams: { clickfunnelsCustomerId, clickfunnelsSubscriptionId }
-        });
-
-        // Validate token and setup page
-        window.onload = function() {
-            console.log('Page loaded, email from params:', email);
-            const emailInput = document.getElementById('email');
+        // Validate magic link on page load
+        window.onload = async function() {
             const signUpButton = document.querySelector('.sign-up-button');
             const errorMessage = document.getElementById('error-message');
 
-            if (!token || !email) {
+            if (errorCode) {
                 errorMessage.style.display = 'block';
-                errorMessage.textContent = 'Invalid invitation link. Please check your email for the correct link.';
+                errorMessage.textContent = errorDescription || 'Invalid or expired link. Please check your email for a new link.';
                 signUpButton.disabled = true;
-                emailInput.value = '';
                 return;
             }
 
-            emailInput.value = email;
-            console.log('Email input value set to:', emailInput.value);
+            if (!accessToken) {
+                errorMessage.style.display = 'block';
+                errorMessage.textContent = 'Invalid link. Please check your email for the correct link.';
+                signUpButton.disabled = true;
+                return;
+            }
+
+            // Set the session
+            const { data: { session }, error: sessionError } = await supabaseClient.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken
+            });
+
+            if (sessionError) {
+                errorMessage.style.display = 'block';
+                errorMessage.textContent = 'Error validating link. Please try again.';
+                signUpButton.disabled = true;
+                return;
+            }
+
+            console.log('Magic link validated successfully');
         }
 
-        // Handle sign up with token validation
+        // Handle password setup
         async function handleSignUp() {
             const password = document.getElementById('password').value;
             const confirmPassword = document.getElementById('confirm-password').value;
@@ -214,36 +218,12 @@
                     throw new Error('Passwords do not match');
                 }
 
-                // Prepare metadata based on source
-                const metadata = {
-                    token: token,
-                    source: source,
-                    // Include Stripe data if present
-                    ...(stripeCustomerId && {
-                        stripe_customer_id: stripeCustomerId,
-                        subscription_id: stripeSubscriptionId
-                    }),
-                    // Include ClickFunnels data if present
-                    ...(clickfunnelsCustomerId && {
-                        clickfunnels_customer_id: clickfunnelsCustomerId,
-                        clickfunnels_subscription_id: clickfunnelsSubscriptionId,
-                        subscribed: true,
-                        subscription_status: 'active'
-                    })
-                };
-
-                console.log('Signing up with metadata:', metadata);
-
-                // Attempt account creation with token and metadata
-                const { error } = await supabaseClient.auth.signUp({
-                    email,
-                    password,
-                    options: {
-                        data: metadata
-                    }
+                // Update the user's password
+                const { error: updateError } = await supabaseClient.auth.updateUser({
+                    password: password
                 });
 
-                if (error) throw error;
+                if (updateError) throw updateError;
 
                 // Show success message
                 formContainer.style.display = 'none';
