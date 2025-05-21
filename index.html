@@ -104,7 +104,7 @@
         // Initialize Supabase client
         const supabaseUrl = 'https://zdakmkxxhysooexdwftk.supabase.co';
         const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpkYWtta3h4aHlzb29leGR3ZnRrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM5NzkxMDMsImV4cCI6MjA1OTU1NTEwM30.Yhsod6DyAMi6XjPQiWw0kvXcGHA3b56a2xBOmnVD6Wk';
-        const supabase = supabase.createClient(supabaseUrl, supabaseAnonKey);
+        const supabaseClient = supabase.createClient(supabaseUrl, supabaseAnonKey);
 
         // Extract token and email from URL
         const params = new URLSearchParams(window.location.search);
@@ -115,18 +115,22 @@
 
         // Validate token and setup page
         window.onload = function() {
+            console.log('Page loaded, email from params:', email); // Debug log
             const emailInput = document.getElementById('email');
             const signUpButton = document.querySelector('.sign-up-button');
             const errorMessage = document.getElementById('error-message');
 
             if (!token || !email) {
                 errorMessage.style.display = 'block';
-                errorMessage.textContent = 'Invalid invitation link.';
+                errorMessage.textContent = 'Invalid invitation link. Please check your email for the correct link.';
                 signUpButton.disabled = true;
+                emailInput.value = ''; // Clear email if invalid
                 return;
             }
 
+            // Set email and ensure it's visible
             emailInput.value = email;
+            console.log('Email input value set to:', emailInput.value); // Debug log
         }
 
         // Handle sign up with token validation
@@ -142,7 +146,7 @@
                 }
 
                 // Attempt account creation with token and additional metadata
-                const { error } = await supabase.auth.signUp({
+                const { error } = await supabaseClient.auth.signUp({
                     email,
                     password,
                     options: {
