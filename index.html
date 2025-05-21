@@ -83,6 +83,48 @@
             margin-bottom: 15px;
             display: none;
         }
+
+        #success-message {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        #success-message h2 {
+            color: #0055FF;
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+
+        #success-message p {
+            color: #666;
+            margin-bottom: 15px;
+            font-size: 17px;
+            line-height: 1.5;
+        }
+
+        .store-links {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 30px;
+        }
+
+        .store-button {
+            padding: 12px 24px;
+            background-color: #000;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .store-button:hover {
+            opacity: 0.9;
+        }
     </style>
 </head>
 <body>
@@ -98,6 +140,15 @@
             <input type="password" id="confirm-password" class="input-field" placeholder="Confirm Password" autocomplete="new-password">
             <button class="sign-up-button" onclick="handleSignUp()">Sign Up</button>
         </div>
+
+        <div id="success-message">
+            <h2>Thank you for signing up!</h2>
+            <p>Download the Thinkwell AI app to get started:</p>
+            <div class="store-links">
+                <a href="#" class="store-button">Download on App Store</a>
+                <a href="#" class="store-button">Get it on Google Play</a>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -106,16 +157,33 @@
         const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpkYWtta3h4aHlzb29leGR3ZnRrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM5NzkxMDMsImV4cCI6MjA1OTU1NTEwM30.Yhsod6DyAMi6XjPQiWw0kvXcGHA3b56a2xBOmnVD6Wk';
         const supabaseClient = supabase.createClient(supabaseUrl, supabaseAnonKey);
 
-        // Extract token and email from URL
+        // Extract all possible parameters from URL
         const params = new URLSearchParams(window.location.search);
         const token = params.get('token');
         const email = params.get('email');
+        
+        // Stripe parameters
         const stripeCustomerId = params.get('stripe_customer_id');
-        const subscriptionId = params.get('subscription_id');
+        const stripeSubscriptionId = params.get('subscription_id');
+        
+        // ClickFunnels parameters
+        const clickfunnelsCustomerId = params.get('clickfunnels_customer_id');
+        const clickfunnelsSubscriptionId = params.get('clickfunnels_subscription_id');
+        
+        // Determine the source
+        const source = clickfunnelsCustomerId ? 'clickfunnels' : 'stripe';
+
+        // Debug log all parameters
+        console.log('Auth parameters:', {
+            email,
+            source,
+            stripeParams: { stripeCustomerId, stripeSubscriptionId },
+            clickfunnelsParams: { clickfunnelsCustomerId, clickfunnelsSubscriptionId }
+        });
 
         // Validate token and setup page
         window.onload = function() {
-            console.log('Page loaded, email from params:', email); // Debug log
+            console.log('Page loaded, email from params:', email);
             const emailInput = document.getElementById('email');
             const signUpButton = document.querySelector('.sign-up-button');
             const errorMessage = document.getElementById('error-message');
@@ -124,13 +192,12 @@
                 errorMessage.style.display = 'block';
                 errorMessage.textContent = 'Invalid invitation link. Please check your email for the correct link.';
                 signUpButton.disabled = true;
-                emailInput.value = ''; // Clear email if invalid
+                emailInput.value = '';
                 return;
             }
 
-            // Set email and ensure it's visible
             emailInput.value = email;
-            console.log('Email input value set to:', emailInput.value); // Debug log
+            console.log('Email input value set to:', emailInput.value);
         }
 
         // Handle sign up with token validation
@@ -139,29 +206,48 @@
             const confirmPassword = document.getElementById('confirm-password').value;
             const errorMessage = document.getElementById('error-message');
             const signUpButton = document.querySelector('.sign-up-button');
+            const formContainer = document.querySelector('.form-container');
+            const successMessage = document.getElementById('success-message');
 
             try {
                 if (password !== confirmPassword) {
                     throw new Error('Passwords do not match');
                 }
 
-                // Attempt account creation with token and additional metadata
+                // Prepare metadata based on source
+                const metadata = {
+                    token: token,
+                    source: source,
+                    // Include Stripe data if present
+                    ...(stripeCustomerId && {
+                        stripe_customer_id: stripeCustomerId,
+                        subscription_id: stripeSubscriptionId
+                    }),
+                    // Include ClickFunnels data if present
+                    ...(clickfunnelsCustomerId && {
+                        clickfunnels_customer_id: clickfunnelsCustomerId,
+                        clickfunnels_subscription_id: clickfunnelsSubscriptionId,
+                        subscribed: true,
+                        subscription_status: 'active'
+                    })
+                };
+
+                console.log('Signing up with metadata:', metadata);
+
+                // Attempt account creation with token and metadata
                 const { error } = await supabaseClient.auth.signUp({
                     email,
                     password,
                     options: {
-                        data: {
-                            token: token,
-                            stripe_customer_id: stripeCustomerId || null,
-                            subscription_id: subscriptionId || null
-                        }
+                        data: metadata
                     }
                 });
 
                 if (error) throw error;
 
-                // Redirect on success
-                window.location.href = '/dashboard';
+                // Show success message
+                formContainer.style.display = 'none';
+                successMessage.style.display = 'block';
 
             } catch (error) {
                 errorMessage.style.display = 'block';
